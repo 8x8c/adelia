@@ -688,6 +688,11 @@ function rebuildThread($id) {
     writePage("res/" . $id . ".html", $content);
 }
 
+/**
+ * Modified rebuildIndexes()
+ * 
+ * FIX: Removed reply preview. Only the OP is shown on the main board.
+ */
 function rebuildIndexes() {
     $threads = allThreads();
     $pages = ceil(count($threads) / CHESSIB_THREADSPERPAGE) - 1;
@@ -696,24 +701,10 @@ function rebuildIndexes() {
     $threadhtml = '';
 
     foreach ($threads as $th) {
-        $tid = $th['id'];
-        $replies = postsInThreadByID($tid);
-        $omitted = max(0, count($replies) - CHESSIB_PREVIEWREPLIES - 1);
-
-        $preview = array();
-        for ($x = count($replies) - 1; $x > $omitted; $x--) {
-            if (!isset($replies[$x])) break;
-            $preview[] = buildPost($replies[$x], false);
-        }
-        $th['omitted'] = $omitted;
+        // Only include the original post (OP) in the index.
         $threadhtml .= buildPost($th, false);
-        $threadhtml .= implode('', array_reverse($preview));
-        if ($omitted > 0) {
-            $threadhtml .= '<span class="omittedposts">' . $omitted . ' ' . plural('post', $omitted) . ' omitted. Click Reply to view.</span>';
-        }
         $threadhtml .= "<br class=\"clear\"><hr>";
         $i++;
-
         if ($i >= CHESSIB_THREADSPERPAGE) {
             $fname = ($page == 0 ? 'index' : $page) . '.html';
             writePage($fname, buildPage($threadhtml, 0, $pages, $page));
@@ -1395,3 +1386,4 @@ function approvePostByID($id) {
     $stmt->execute();
 }
 ?>
+
