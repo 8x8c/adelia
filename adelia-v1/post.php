@@ -477,14 +477,13 @@ HTML;
 }
 
 // buildPost() outputs an individual post.
-// When $respage is true (i.e. when the post is displayed on a reply page),
-// file paths for images are prefixed with "../".
 function buildPost($post, $respage = false) {
     $id = $post['id'];
     $parent = $post['parent'];
     $threadid = ($parent == 0) ? $id : $parent;
     $time_iso = date('Y-m-d\TH:i:s', $post['timestamp']);
     $time_formatted = date('m/d/y (D) H:i:s', $post['timestamp']);
+
     $file_html = '';
     if ($post['file'] != '') {
         if ($respage) {
@@ -498,16 +497,25 @@ function buildPost($post, $respage = false) {
         $file_html .= '<p class="fileinfo">File: <a href="' . $file_path . '">' . $post['file'] . '</a> <span class="unimportant">('
             . $post['file_size_formatted'] . ', ' . $post['image_width'] . 'x' . $post['image_height'] . ', <a class="postfilename" href="'
             . $file_path . '" download="' . $post['file_original'] . '" title="Save as original filename">' . $post['file_original'] . '</a>)</span></p>';
-        $file_html .= '<a href="' . $file_path . '" target="_blank"><img class="post-image" src="' . $thumb_path . '" style="width:255px;height:255px" alt="" /></a>';
+
+        // Inlined style usage just for example/demonstration
+        $file_html .= '<a href="' . $file_path . '" target="_blank">'
+            . '<img class="post-image" src="' . $thumb_path . '" style="width:255px;height:255px" alt="" /></a>';
         $file_html .= '</div></div>';
     }
+
     $subject = ($post['subject'] != '') ? $post['subject'] : '';
     $name = ($post['name'] != '') ? $post['name'] : 'Anonymous';
-    $intro = '<p class="intro"><input type="checkbox" class="delete" name="delete_' . $id . '" id="delete_' . $id . '" /><label for="delete_' . $id . '"><span class="subject">' . $subject . ' </span> <span class="name">' . $name . '</span> <time datetime="' . $time_iso . '">' . $time_formatted . '</time></label>&nbsp;';
-    $intro .= '<a class="post_no" id="post_no_' . $id . '" onclick="highlightReply(' . $id . ')" href="res/' . $threadid . '.html#' . $id . '">No.</a>';
-    $intro .= '<a class="post_no" onclick="citeReply(' . $id . ')" href="res/' . $threadid . '.html#q' . $id . '">' . $id . '</a>';
-    $intro .= '<a href="res/' . $threadid . '.html">[Reply]</a></p>';
+    $intro = '<p class="intro"><input type="checkbox" class="delete" name="delete_' . $id . '" id="delete_' . $id . '" />'
+           . '<label for="delete_' . $id . '"><span class="subject">' . $subject . ' </span> '
+           . '<span class="name">' . $name . '</span> '
+           . '<time datetime="' . $time_iso . '">' . $time_formatted . '</time></label>&nbsp;'
+           . '<a class="post_no" id="post_no_' . $id . '" onclick="highlightReply(' . $id . ')" href="res/' . $threadid . '.html#' . $id . '">No.</a>'
+           . '<a class="post_no" onclick="citeReply(' . $id . ')" href="res/' . $threadid . '.html#q' . $id . '">' . $id . '</a>'
+           . '<a href="res/' . $threadid . '.html">[Reply]</a></p>';
+
     $body = '<div class="body">' . $post['message'] . '</div>';
+
     $html = '<div class="thread" id="thread_' . $id . '" data-board="' . CHESSIB_BOARD . '">';
     $html .= $file_html;
     $html .= '<div class="post op" id="op_' . $id . '">' . $intro . $body . '</div>';
@@ -517,9 +525,11 @@ function buildPost($post, $respage = false) {
 
 // buildPage() creates an index page with a posting form and a list of threads.
 function buildPage($htmlposts, $parent = 0, $pages = 0, $thispage = 0) {
+    // NOTE: We add a hidden <input name="parent" value="0"> for new threads.
     $post_form = <<<HTML
 <form name="post" onsubmit="return doPost(this);" enctype="multipart/form-data" action="post.php" method="post">
   <input type="hidden" name="board" value="b">
+  <input type="hidden" name="parent" value="0">
   <table>
     <tr>
       <th>Name</th>
@@ -546,18 +556,20 @@ function buildPage($htmlposts, $parent = 0, $pages = 0, $thispage = 0) {
   </table>
 </form>
 HTML;
+
     $post_controls = <<<HTML
 <form name="postcontrols" action="post.php" method="post">
   <input type="hidden" name="board" value="b" />
   $htmlposts
 </form>
 HTML;
+
     return pageHeader() . $post_form . $post_controls . pageFooter();
 }
 
 // buildReplyPage() creates a reply (thread) page.
-// Note: All form actions and links are adjusted with "../" because this page is in the "res" folder.
 function buildReplyPage($htmlposts, $thread_id, $thread_title) {
+    // IMPORTANT: use name="parent" instead of "thread"
     return <<<HTML
 <!doctype html>
 <html>
@@ -598,7 +610,7 @@ function buildReplyPage($htmlposts, $thread_id, $thread_title) {
   </header>
   <div class="banner">Posting mode: Reply <a class="unimportant" href="../index.html">[Return]</a> <a class="unimportant" href="#bottom">[Go to bottom]</a></div>
   <form name="post" onsubmit="return doPost(this);" enctype="multipart/form-data" action="../post.php" method="post">
-    <input type="hidden" name="thread" value="{$thread_id}">
+    <input type="hidden" name="parent" value="{$thread_id}">
     <input type="hidden" name="board" value="b">
     <table>
       <tr>
@@ -682,10 +694,12 @@ function rebuildIndexes() {
     $page = 0;
     $i = 0;
     $threadhtml = '';
+
     foreach ($threads as $th) {
         $tid = $th['id'];
         $replies = postsInThreadByID($tid);
         $omitted = max(0, count($replies) - CHESSIB_PREVIEWREPLIES - 1);
+
         $preview = array();
         for ($x = count($replies) - 1; $x > $omitted; $x--) {
             if (!isset($replies[$x])) break;
@@ -699,6 +713,7 @@ function rebuildIndexes() {
         }
         $threadhtml .= "<br class=\"clear\"><hr>";
         $i++;
+
         if ($i >= CHESSIB_THREADSPERPAGE) {
             $fname = ($page == 0 ? 'index' : $page) . '.html';
             writePage($fname, buildPage($threadhtml, 0, $pages, $page));
@@ -714,7 +729,7 @@ function rebuildIndexes() {
 }
 
 /**
- * Management Functions (unchanged)
+ * Management Functions
  */
 function manageCheckLogIn() {
     $loggedin = false;
@@ -774,6 +789,8 @@ function manageStatus() {
     $threads = countThreads();
     $bans = count(allBans());
     $info = "$threads thread(s), $bans ban(s).";
+
+    // Show all unapproved posts if CHESSIB_REQMOD != 'disable'
     $reqmod_post_html = '';
     if (CHESSIB_REQMOD != 'disable') {
         $all = latestPosts(false);
@@ -794,10 +811,13 @@ function manageStatus() {
             }
         }
     }
+
     $reqmod_html = '';
     if ($reqmod_post_html != '') {
         $reqmod_html = '<fieldset><legend>Pending posts</legend>' . $reqmod_post_html . '</fieldset>';
     }
+
+    // Show last 5 approved posts
     $post_html = '';
     $latest = latestPosts(true);
     $c = 0;
@@ -811,6 +831,7 @@ function manageStatus() {
                      <input type="submit" value="Moderate"></form>';
         $c++;
     }
+
     $html = <<<EOF
 <fieldset><legend>Status</legend>
 <fieldset><legend>Info</legend>
@@ -910,8 +931,11 @@ function manageModeratePost($post) {
     global $isadmin;
     $ban = banByIP($post['ip']);
     $ban_disabled = (!$ban && $isadmin) ? '' : ' disabled';
-    $ban_info = (!$ban) ? ((!$isadmin) ? 'Only an admin can ban.' : 'IP: ' . $post['ip']) : 'Ban already exists for ' . $post['ip'];
+    $ban_info = (!$ban)
+        ? ((!$isadmin) ? 'Only an admin can ban.' : 'IP: ' . $post['ip'])
+        : 'Ban already exists for ' . $post['ip'];
     $delete_info = ($post['parent'] == 0) ? 'Delete entire thread below' : 'Delete only this post';
+
     $post_html = '';
     if ($post['parent'] == 0) {
         $arr = postsInThreadByID($post['id']);
@@ -921,6 +945,7 @@ function manageModeratePost($post) {
     } else {
         $post_html .= buildPost($post, false);
     }
+
     return <<<EOF
 <fieldset>
 <legend>Moderating No.{$post['id']}</legend>
@@ -968,6 +993,8 @@ $redirect = true;
 // 1) New Post Submission
 if (isset($_POST['body']) || isset($_FILES['file'])) {
     list($loggedin, $isadmin) = manageCheckLogIn();
+
+    // Ban / Flood check
     if (!$loggedin) {
         $ban = banByIP($_SERVER['REMOTE_ADDR']);
         if ($ban) {
@@ -985,8 +1012,12 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
             }
         }
     }
+
     $rawpost = (isset($_POST['rawpost']) && $loggedin);
 
+    // ************************
+    // FIXED: we now read parent from "parent" (0 = new thread, otherwise = reply)
+    // ************************
     $parent = 0;
     if (isset($_POST['parent'])) {
         $parent = (int)$_POST['parent'];
@@ -1000,14 +1031,15 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
     $post['bumped'] = time();
     $post['ip'] = $_SERVER['REMOTE_ADDR'];
 
-    // Use form fields "name", "subject" and "body"
+    // Basic fields
     $post['name'] = cleanString(substr($_POST['name'] ?? '', 0, 75));
-    $post['tripcode'] = ''; // Not processing tripcodes here
+    $post['tripcode'] = ''; // Not fully processing tripcodes here, but could use nameAndTripcode()
     $post['subject'] = cleanString(substr($_POST['subject'] ?? '', 0, 100));
 
     if ($rawpost) {
+        // Show an admin or mod "tag" if desired
         $rawposttext = ($isadmin) ? ' <span style="color:red;">## Admin</span>' : ' <span style="color:purple;">## Mod</span>';
-        $post['message'] = $_POST['body']; // raw HTML
+        $post['message'] = $_POST['body']; // Raw HTML
     } else {
         $rawposttext = '';
         $msg = rtrim($_POST['body'] ?? '');
@@ -1015,11 +1047,12 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
         $msg = str_replace("\n", "<br>", $msg);
         $post['message'] = $msg;
     }
-    $post['password'] = ''; // No password field used here
-    $post['email'] = ''; // Not used
+
+    $post['password'] = ''; // Not using per-post passwords here
+    $post['email'] = '';
     $post['nameblock'] = nameBlock($post['name'], $post['tripcode'], '', $post['timestamp'], $rawposttext);
 
-    // File upload handling
+    // File upload
     if (isset($_FILES['file']) && $_FILES['file']['name'] != '') {
         if ($_FILES['file']['error'] != UPLOAD_ERR_OK) {
             fancyDie("File upload error: {$_FILES['file']['error']}");
@@ -1044,6 +1077,7 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
         if ($dupe) {
             fancyDie("Duplicate file. Already posted <a href=\"res/" . $dupe['id'] . ".html\">here</a>.");
         }
+
         $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
         if ($ext == 'jpeg') $ext = 'jpg';
         $fname = time() . substr(microtime(), 2, 3) . '.' . $ext;
@@ -1053,14 +1087,18 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
         if (!move_uploaded_file($tmp, $dst)) {
             fancyDie("Could not move uploaded file.");
         }
+
         $info = @getimagesize($dst);
         $mime = ($info['mime'] ?? '');
         $post['image_width'] = 0;
         $post['image_height'] = 0;
+
         if ($ext == 'webm') {
             if (!CHESSIB_WEBM) {
                 fancyDie("Unsupported file type.");
             }
+            // For WebM, you might want to generate a thumbnail using ffmpeg
+            // For now, we just drop in a placeholder
             $thb = "thumb/" . $post['thumb'];
             copy("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFgAAABYCAYAAABX2UokAAAA0UlEQVR42u3QwQnAIBBE0c0v9ElZJL2pukl7g0Ao1/mtzD0ybA47b4cFMLDgypgWWDPBQkzJO4BAAAAAAAAAAAA7x2RJCf4rWZb04AAAAASUVORK5CYII=", $thb);
             $post['thumb_width'] = 88;
@@ -1074,6 +1112,7 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
             }
             $post['image_width'] = $info[0];
             $post['image_height'] = $info[1];
+
             list($tw, $th) = array(CHESSIB_MAXWOP, CHESSIB_MAXHOP);
             $thb = "thumb/" . $post['thumb'];
             if (!createThumbnail($dst, $thb, $tw, $th)) {
@@ -1084,15 +1123,17 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
             $post['thumb_height'] = $thInfo[1];
         }
     } else {
+        // If OP doesn't upload a file but CHESSIB_NOFILEOK==false, disallow new thread
         if ($parent == 0 && (CHESSIB_PIC || CHESSIB_WEBM) && !CHESSIB_NOFILEOK) {
             fancyDie("A file is required to start a thread.");
         }
+        // Otherwise require at least some text
         if (strip_tags(str_replace('<br>', '', $post['message'])) == '') {
             fancyDie("Please enter a comment or upload a file.");
         }
     }
 
-    // Moderation check
+    // Possibly mark for moderation if required
     if (!$loggedin && (($post['file'] != '' && CHESSIB_REQMOD == 'files') || CHESSIB_REQMOD == 'all')) {
         $post['moderated'] = 0;
         echo "Your post will be shown once approved.<br>";
@@ -1100,10 +1141,13 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
     }
 
     $postid = insertPost($post);
+
+    // If the post is already moderated or user was admin/mod, rebuild pages:
     if ($post['moderated'] == 1) {
         trimThreads();
         if ($parent != 0) {
             rebuildThread($parent);
+            // "sage" check
             if (strtolower($post['email']) != 'sage') {
                 if (CHESSIB_MAXREPLIES == 0 || numRepliesToThreadByID($parent) <= CHESSIB_MAXREPLIES) {
                     bumpThreadByID($parent);
@@ -1115,7 +1159,7 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
         rebuildIndexes();
     }
 
-// 2) Delete Post
+// 2) Delete Post from the front-end
 } elseif (isset($_GET['delete']) && !isset($_GET['manage'])) {
     if (!isset($_POST['delete'])) {
         fancyDie('Tick the box next to a post and click "Delete".');
@@ -1123,11 +1167,14 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
     $delid = (int)$_POST['delete'];
     $p = postByID($delid);
     if (!$p) fancyDie('Invalid post ID given.');
+
     list($loggedin, $isadmin) = manageCheckLogIn();
+    // If staff is logged in and no password given -> jump to mod page
     if ($loggedin && ($_POST['password'] == '')) {
         echo '<meta http-equiv="refresh" content="0;url=' . basename($_SERVER['PHP_SELF']) . '?manage&moderate=' . $delid . '">';
         $redirect = false;
     } else {
+        // Otherwise check user post password
         if ($p['password'] != '' && md5(md5($_POST['password'])) == $p['password']) {
             $par = $p['parent'];
             deletePostByID($delid);
@@ -1143,13 +1190,14 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
         }
     }
 
-// 3) Management (unchanged)
+// 3) Management
 } elseif (isset($_GET['manage'])) {
     $text = '';
     $onload = '';
     list($loggedin, $isadmin) = manageCheckLogIn();
     $returnlink = basename($_SERVER['PHP_SELF']);
     $redirect = false;
+
     if ($loggedin) {
         if ($isadmin && isset($_GET['rebuildall'])) {
             $all = allThreads();
@@ -1158,6 +1206,7 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
             }
             rebuildIndexes();
             $text .= "<div>Rebuilt board.</div>";
+
         } elseif ($isadmin && isset($_GET['bans'])) {
             clearExpiredBans();
             if (isset($_POST['ip'])) {
@@ -1185,17 +1234,21 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
             $onload = ' onload="document.tinyib.ip.focus();"';
             $text .= manageBanForm();
             $text .= manageBansTable();
+
         } elseif (isset($_GET['delete'])) {
             $did = (int)$_GET['delete'];
             $p = postByID($did);
             if ($p) {
                 deletePostByID($did);
                 rebuildIndexes();
-                if ($p['parent'] != 0) rebuildThread($p['parent']);
+                if ($p['parent'] != 0) {
+                    rebuildThread($p['parent']);
+                }
                 $text .= '<div>Post ' . $did . ' deleted.</div>';
             } else {
                 fancyDie("No post with that ID");
             }
+
         } elseif (isset($_GET['approve'])) {
             $aid = (int)$_GET['approve'];
             $p = postByID($aid);
@@ -1212,6 +1265,7 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
             } else {
                 fancyDie("No post with that ID");
             }
+
         } elseif (isset($_GET['moderate'])) {
             $mid = (int)$_GET['moderate'];
             if ($mid > 0) {
@@ -1225,15 +1279,18 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
                 $onload = ' onload="document.tinyib.moderate.focus();"';
                 $text .= manageModeratePostForm();
             }
+
         } elseif (isset($_GET['rawpost'])) {
             $onload = ' onload="document.tinyib.message.focus();"';
             $text .= manageRawPostForm();
+
         } elseif (isset($_GET['logout'])) {
             $_SESSION['tinyib'] = '';
             session_destroy();
             echo '<meta http-equiv="refresh" content="0;url=' . $returnlink . '?manage">';
             exit;
         }
+
         if ($text == '') {
             $text .= manageStatus();
         }
@@ -1251,7 +1308,8 @@ if (isset($_POST['body']) || isset($_FILES['file'])) {
 }
 
 if ($redirect) {
-    echo '<meta http-equiv="refresh" content="' . (isset($slow_redirect) ? 3 : 0) . ';url=' . (is_string($redirect) ? $redirect : 'index.html') . '">';
+    echo '<meta http-equiv="refresh" content="' . (isset($slow_redirect) ? 3 : 0) . ';url='
+       . (is_string($redirect) ? $redirect : 'index.html') . '">';
 }
 
 /**
@@ -1277,13 +1335,16 @@ function createThumbnail($src_path, $thumb_path, $new_w, $new_h) {
     $thumb_w = max(1, round($old_w * $scale));
     $thumb_h = max(1, round($old_h * $scale));
     $thumb_img = imagecreatetruecolor($thumb_w, $thumb_h);
+
     if ($ext == 'png') {
         imagealphablending($thumb_img, false);
         imagesavealpha($thumb_img, true);
         $transparent = imagecolorallocatealpha($thumb_img, 0, 0, 0, 127);
         imagefilledrectangle($thumb_img, 0, 0, $thumb_w, $thumb_h, $transparent);
     }
+
     imagecopyresampled($thumb_img, $src_img, 0, 0, 0, 0, $thumb_w, $thumb_h, $old_w, $old_h);
+
     if ($ext == 'jpg' || $ext == 'jpeg') {
         imagejpeg($thumb_img, $thumb_path, 80);
     } elseif ($ext == 'png') {
@@ -1294,5 +1355,43 @@ function createThumbnail($src_path, $thumb_path, $new_w, $new_h) {
     imagedestroy($thumb_img);
     imagedestroy($src_img);
     return true;
+}
+
+// ----------------------------------------------------------------------
+// MISSING HELPER FUNCTIONS: latestPosts() & approvePostByID()
+// ----------------------------------------------------------------------
+
+/**
+ * Return a list of the most recent posts, optionally only approved ones.
+ * 
+ * @param bool $onlyApproved  If true, return only moderated=1 posts.
+ * @param int  $limit         Max records to fetch (default 100).
+ */
+function latestPosts($onlyApproved = false, $limit = 100) {
+    $db = dbConnect();
+    $sql = "SELECT * FROM " . CHESSIB_DBPOSTS;
+    if ($onlyApproved) {
+        $sql .= " WHERE moderated=1";
+    }
+    $sql .= " ORDER BY id DESC LIMIT :lim";
+    $stmt = $db->prepare($sql);
+    $stmt->bindValue(':lim', $limit, SQLITE3_INTEGER);
+    $res = $stmt->execute();
+
+    $posts = array();
+    while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+        $posts[] = $row;
+    }
+    return $posts;
+}
+
+/**
+ * Approve a post (set moderated=1) by its ID.
+ */
+function approvePostByID($id) {
+    $db = dbConnect();
+    $stmt = $db->prepare("UPDATE " . CHESSIB_DBPOSTS . " SET moderated=1 WHERE id=:id");
+    $stmt->bindValue(':id', (int)$id, SQLITE3_INTEGER);
+    $stmt->execute();
 }
 ?>
