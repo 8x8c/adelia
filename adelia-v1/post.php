@@ -644,7 +644,7 @@ function buildReplyPage($htmlposts, $thread_id, $thread_title) {
   </form>
   <a name="bottom"></a>
   <footer>
-    <p class="unimportant" style="margin-top:20px;text-align:center;">- Board powered by TinyIB -</p>
+    <p class="unimportant" style="margin-top:20px;text-align:center;">- Board powered by Adelia -</p>
   </footer>
   <script type="text/javascript">ready();</script>
 </body>
