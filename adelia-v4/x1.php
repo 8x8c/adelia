@@ -1,9 +1,11 @@
 <?php
+declare(strict_types=1);
+
 // x1.php: Contains all moderation-related functions
 
-function manageCheckLogIn() {
+function manageCheckLogIn(): array {
     $loggedin = false;
-    $isadmin = false;
+    $isadmin  = false;
     if (isset($_POST['password'])) {
         if ($_POST['password'] === CHESSIB_ADMINPASS) {
             $_SESSION['tinyib'] = CHESSIB_ADMINPASS;
@@ -14,17 +16,17 @@ function manageCheckLogIn() {
     if (isset($_SESSION['tinyib'])) {
         if ($_SESSION['tinyib'] === CHESSIB_ADMINPASS) {
             $loggedin = true;
-            $isadmin = true;
+            $isadmin  = true;
         } elseif (CHESSIB_MODPASS !== '' && $_SESSION['tinyib'] === CHESSIB_MODPASS) {
             $loggedin = true;
         }
     }
-    return array($loggedin, $isadmin);
+    return [$loggedin, $isadmin];
 }
 
-function managePage($body, $onload = '') {
+function managePage(string $body, string $onload = ''): string {
     $r = basename($_SERVER['PHP_SELF']);
-    list($loggedin, $isadmin) = manageCheckLogIn();
+    [$loggedin, $isadmin] = manageCheckLogIn();
     $adminbar = '[<a href="' . $r . '">Return</a>]';
     if ($loggedin) {
         $adminbar = '[<a href="?manage">Status</a>] '
@@ -33,7 +35,8 @@ function managePage($body, $onload = '') {
             . ($isadmin ? '[<a href="?manage&rebuildall">Rebuild All</a>] ' : '')
             . '[<a href="?manage&logout">Log Out</a>] &middot; [<a href="' . $r . '">Return</a>]';
     }
-    return pageHeader() . '<body' . $onload . '>
+    return pageHeader()
+        . '<body' . $onload . '>
     <div style="text-align:right">' . $adminbar . '</div>
     <header><h1>' . CHESSIB_BOARDDESC . '</h1></header>
     <hr>
@@ -42,7 +45,7 @@ function managePage($body, $onload = '') {
     <hr>' . pageFooter();
 }
 
-function manageLogInForm() {
+function manageLogInForm(): string {
     return <<<EOF
 <form id="tinyib" name="tinyib" method="post" action="?manage">
 <fieldset>
@@ -56,15 +59,15 @@ function manageLogInForm() {
 EOF;
 }
 
-function manageStatus() {
+function manageStatus(): string {
     $threads = countThreads();
     $info = "$threads thread(s).";
     $reqmod_post_html = '';
-    if (CHESSIB_REQMOD != 'disable') {
+    if (CHESSIB_REQMOD !== 'disable') {
         $all = latestPosts(false);
         foreach ($all as $p) {
             if ($p['moderated'] == 0) {
-                if ($reqmod_post_html != '') {
+                if ($reqmod_post_html !== '') {
                     $reqmod_post_html .= '<hr>';
                 }
                 $reqmod_post_html .= buildPost($p, false) . '<br>';
@@ -80,15 +83,17 @@ function manageStatus() {
         }
     }
     $reqmod_html = '';
-    if ($reqmod_post_html != '') {
+    if ($reqmod_post_html !== '') {
         $reqmod_html = '<fieldset><legend>Pending posts</legend>' . $reqmod_post_html . '</fieldset>';
     }
     $post_html = '';
     $latest = latestPosts(true);
     $c = 0;
     foreach ($latest as $lp) {
-        if ($c >= 5) break;
-        if ($post_html != '') {
+        if ($c >= 5) {
+            break;
+        }
+        if ($post_html !== '') {
             $post_html .= '<hr>';
         }
         $post_html .= buildPost($lp, false) . '<br>';
@@ -110,7 +115,7 @@ EOF;
     return $html;
 }
 
-function manageModeratePostForm() {
+function manageModeratePostForm(): string {
     return <<<EOF
 <form method="get" action="?">
 <input type="hidden" name="manage">
@@ -126,7 +131,7 @@ While browsing the board, tick the box near a post & click "Delete" with a blank
 EOF;
 }
 
-function manageRawPostForm() {
+function manageRawPostForm(): string {
     $max_size_html = '';
     if (CHESSIB_MAXKB > 0) {
         $max_size_html = '<input type="hidden" name="MAX_FILE_SIZE" value="' . (CHESSIB_MAXKB * 1024) . '">';
@@ -151,12 +156,11 @@ $max_size_html
 EOF;
 }
 
-function manageModeratePost($post) {
-    global $isadmin;
-    $delete_info = ($post['parent'] == 0) ? 'Delete entire thread below' : 'Delete only this post';
+function manageModeratePost(array $post): string {
+    $delete_info = ((int)$post['parent'] === 0) ? 'Delete entire thread below' : 'Delete only this post';
     $post_html = '';
-    if ($post['parent'] == 0) {
-        $arr = postsInThreadByID($post['id']);
+    if ((int)$post['parent'] === 0) {
+        $arr = postsInThreadByID((int)$post['id']);
         foreach ($arr as $pp) {
             $post_html .= buildPost($pp, false);
         }
@@ -188,10 +192,9 @@ $post_html
 EOF;
 }
 
-function approvePostByID($id) {
+function approvePostByID(int $id): void {
     $db = dbConnect();
     $stmt = $db->prepare("UPDATE " . CHESSIB_DBPOSTS . " SET moderated=1 WHERE id=:id");
-    $stmt->bindValue(':id', (int)$id, SQLITE3_INTEGER);
+    $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
     $stmt->execute();
 }
-?>

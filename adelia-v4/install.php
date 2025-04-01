@@ -1,12 +1,15 @@
 <?php
+declare(strict_types=1);
+
+// install.php
 error_reporting(E_ALL);
-ini_set("display_errors", 1);
+ini_set("display_errors", "1");
 
 // Create the /db directory if it doesn't exist
 $dbDir = __DIR__ . '/db';
 if (!is_dir($dbDir)) {
     if (!mkdir($dbDir, 0755, true)) {
-        die("Failed to create /db directory.");
+        exit("Failed to create /db directory.");
     }
 }
 
@@ -20,11 +23,12 @@ $db->busyTimeout(5000);
 
 // Set WAL mode for better concurrency
 if (!$db->exec("PRAGMA journal_mode=WAL;")) {
-    die("Failed to set WAL mode.");
+    exit("Failed to set WAL mode.");
 }
 
 // Create the posts table
-$createTableSQL = "CREATE TABLE IF NOT EXISTS " . CHESSIB_DBPOSTS . " (
+$createTableSQL = "
+CREATE TABLE IF NOT EXISTS " . CHESSIB_DBPOSTS . " (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     parent INTEGER NOT NULL,
     timestamp INTEGER NOT NULL,
@@ -49,10 +53,11 @@ $createTableSQL = "CREATE TABLE IF NOT EXISTS " . CHESSIB_DBPOSTS . " (
     thumb_height INTEGER NOT NULL,
     stickied INTEGER NOT NULL DEFAULT 0,
     moderated INTEGER NOT NULL DEFAULT 1
-);";
+);
+";
 
 if (!$db->exec($createTableSQL)) {
-    die("Failed to create posts table: " . $db->lastErrorMsg());
+    exit("Failed to create posts table: " . $db->lastErrorMsg());
 }
 
 // Set permissions on the database file
@@ -70,4 +75,3 @@ rebuildIndexes();
 // Redirect the user to index.html
 header("Location: index.html");
 exit;
-?>
