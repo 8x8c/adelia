@@ -20,3 +20,8 @@ Last but not least, this code is incredibly easy to feed to Ai in order to audit
 
 
 
+![1](https://github.com/user-attachments/assets/2d6e9aa1-5303-4167-96c0-f517193fc212)
+
+
+
+![2](https://github.com/user-attachments/assets/b4e5f40a-24a3-48c7-be27-097de83943d0)
