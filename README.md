@@ -1,5 +1,5 @@
 
-# Adelia - the no nonsense elite simple imageboard
+# Adelia -  elite simple imageboard
 
 
 Based on Claire, tinyib, and vichan 
