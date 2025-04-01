@@ -1,4 +1,7 @@
 
+# Adelia 
+
+
 Based on Claire, tinyib, and vichan 
 
 There are lots of imageboard scripts on github, most of them are horrible! Adelia is a no-nonsense modular solution. 
