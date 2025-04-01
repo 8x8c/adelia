@@ -14,5 +14,7 @@ just run it- sets up sqlite2 db and needed directories !!
 
 This uses static html files- so visitors land on html pages only so its super fast loading for visitors. 
 
+Last but not least, this code is incredibly easy to feed to Ai in order to audit or change anything you want! 
+
 
 
