@@ -12,39 +12,38 @@ define('CHESSIB_BOARD', "b");
 define('CHESSIB_BOARDDESC', "/b/ - Random");
 
 // Behavior / Appearance
-define('CHESSIB_CAPTCHA', false);
-define('CHESSIB_REQMOD', "disable");
-define('CHESSIB_THREADSPERPAGE', 10);
+define('CHESSIB_REQMOD', "disable"); // To enable moderation change this to "all" or "files"
+define('CHESSIB_THREADSPERPAGE', 5);
 define('CHESSIB_PREVIEWREPLIES', 3);
-define('CHESSIB_TRUNCATE', 15);
+define('CHESSIB_TRUNCATE', 900);
 
 // Flood / Limit
-define('CHESSIB_DELAY', 3);             // Seconds between posts from same IP
-define('CHESSIB_MAXTHREADS', 100);       // Max threads on the board
-define('CHESSIB_MAXREPLIES', 0);         // 0 = unlimited
+define('CHESSIB_DELAY', 5);
+define('CHESSIB_MAXTHREADS', 100);
+define('CHESSIB_MAXREPLIES', 0);
 
 // File Types
-define('CHESSIB_PIC', true);             // Allow JPG/PNG/GIF
-define('CHESSIB_WEBM', true);            // Allow WebM
+define('CHESSIB_PIC', true);
+define('CHESSIB_WEBM', true);
 
 // File Control
-define('CHESSIB_MAXKB', 10240);          // Max upload in KB
+define('CHESSIB_MAXKB', 10240);
 define('CHESSIB_MAXKBDESC', "10 MB");
 
 // Thumbnail dimensions
-define('CHESSIB_MAXWOP', 250);           // OP thumbnail max width
-define('CHESSIB_MAXHOP', 250);           // OP thumbnail max height
-define('CHESSIB_MAXW',   250);           // Reply thumbnail max width
-define('CHESSIB_MAXH',   250);           // Reply thumbnail max height
+define('CHESSIB_MAXWOP', 250);
+define('CHESSIB_MAXHOP', 250);
+define('CHESSIB_MAXW',   250);
+define('CHESSIB_MAXH',   250);
 
 // Tripcode seed
 define('CHESSIB_TRIPSEED', "some_random_string_for_tripcodes");
 
 // Database (SQLite3) settings
+// Updated DB location to /db directory
 define('CHESSIB_DBMODE', "sqlite3");
-define('CHESSIB_DBNAME', "chessib.db");
+define('CHESSIB_DBNAME', "db/chessib.db");
 define('CHESSIB_DBPOSTS', "posts");
-define('CHESSIB_DBBANS',  "bans");
 
 // Optional logo HTML
 define('CHESSIB_LOGO', "");
@@ -147,39 +146,8 @@ function dbConnect() {
     if ($db === null) {
         $db = new SQLite3(CHESSIB_DBNAME);
         $db->busyTimeout(5000);
-        $db->exec("CREATE TABLE IF NOT EXISTS " . CHESSIB_DBPOSTS . " (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            parent INTEGER NOT NULL,
-            timestamp INTEGER NOT NULL,
-            bumped INTEGER NOT NULL,
-            ip TEXT NOT NULL,
-            name TEXT NOT NULL,
-            tripcode TEXT NOT NULL,
-            email TEXT NOT NULL,
-            nameblock TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            message TEXT NOT NULL,
-            password TEXT NOT NULL,
-            file TEXT NOT NULL,
-            file_hex TEXT NOT NULL,
-            file_original TEXT NOT NULL,
-            file_size INTEGER NOT NULL,
-            file_size_formatted TEXT NOT NULL,
-            image_width INTEGER NOT NULL,
-            image_height INTEGER NOT NULL,
-            thumb TEXT NOT NULL,
-            thumb_width INTEGER NOT NULL,
-            thumb_height INTEGER NOT NULL,
-            stickied INTEGER NOT NULL DEFAULT 0,
-            moderated INTEGER NOT NULL DEFAULT 1
-        )");
-        $db->exec("CREATE TABLE IF NOT EXISTS " . CHESSIB_DBBANS . " (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ip TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            expire INTEGER NOT NULL,
-            reason TEXT NOT NULL
-        )");
+        // Enforce WAL mode on connection
+        $db->exec("PRAGMA journal_mode=WAL;");
     }
     return $db;
 }
@@ -321,7 +289,6 @@ function deletePostByID($id) {
     $p = postByID($id);
     if (!$p) return;
     if ($p['parent'] == 0) {
-        // OP: delete entire thread
         $all = postsInThreadByID($id);
         foreach ($all as $pp) {
             deletePostImages($pp);
@@ -331,7 +298,6 @@ function deletePostByID($id) {
         }
         @unlink("res/" . $id . ".html");
     } else {
-        // Single reply
         deletePostImages($p);
         $stmt = $db->prepare("DELETE FROM " . CHESSIB_DBPOSTS . " WHERE id=:pid LIMIT 1");
         $stmt->bindValue(':pid', (int)$id, SQLITE3_INTEGER);
@@ -368,62 +334,8 @@ function trimThreads() {
 }
 
 /**
- * Ban Functions
- */
-function banByIP($ip) {
-    $db = dbConnect();
-    $stmt = $db->prepare("SELECT * FROM " . CHESSIB_DBBANS . " WHERE ip=:ip LIMIT 1");
-    $stmt->bindValue(':ip', $ip, SQLITE3_TEXT);
-    return $stmt->execute()->fetchArray(SQLITE3_ASSOC) ?: null;
-}
-
-function insertBan($ban) {
-    $db = dbConnect();
-    $stmt = $db->prepare("INSERT INTO " . CHESSIB_DBBANS . " 
-        (ip, timestamp, expire, reason)
-        VALUES (:ip, :ts, :ex, :reason)");
-    $stmt->bindValue(':ip', $ban['ip'], SQLITE3_TEXT);
-    $stmt->bindValue(':ts', time(), SQLITE3_INTEGER);
-    $stmt->bindValue(':ex', $ban['expire'], SQLITE3_INTEGER);
-    $stmt->bindValue(':reason', $ban['reason'], SQLITE3_TEXT);
-    $stmt->execute();
-}
-
-function clearExpiredBans() {
-    $db = dbConnect();
-    $now = time();
-    $db->exec("DELETE FROM " . CHESSIB_DBBANS . " WHERE expire>0 AND expire<=$now");
-}
-
-function banByID($id) {
-    $db = dbConnect();
-    $stmt = $db->prepare("SELECT * FROM " . CHESSIB_DBBANS . " WHERE id=:id LIMIT 1");
-    $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
-    return $stmt->execute()->fetchArray(SQLITE3_ASSOC) ?: null;
-}
-
-function deleteBanByID($id) {
-    $db = dbConnect();
-    $stmt = $db->prepare("DELETE FROM " . CHESSIB_DBBANS . " WHERE id=:id LIMIT 1");
-    $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
-    $stmt->execute();
-}
-
-function allBans() {
-    $db = dbConnect();
-    $res = $db->query("SELECT * FROM " . CHESSIB_DBBANS . " ORDER BY timestamp DESC");
-    $bans = array();
-    while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
-        $bans[] = $r;
-    }
-    return $bans;
-}
-
-/**
  * Page Building Functions
  */
-
-// Standard index page header (assets loaded from root)
 function pageHeader() {
     return <<<HTML
 <!doctype html>
@@ -450,7 +362,6 @@ function pageHeader() {
   <meta name="twitter:card" value="summary">
   <meta name="twitter:title" content="/b/ - Random" />
   <meta name="twitter:description" content="" />
-  <meta name="twitter:image" content="http://localhost/" />
   <meta property="og:title" content="/b/ - Random" />
   <meta property="og:type" content="article" />
   <meta property="og:image" content="http://localhost/" />
@@ -475,12 +386,15 @@ function pageFooter() {
 HTML;
 }
 
-// buildPost() outputs an individual post.
-// UPDATED: Removed display of date/time, post number, file info, and in reply mode (when $respage is true) no [Reply] link.
 function buildPost($post, $respage = false) {
     $id = $post['id'];
     $parent = $post['parent'];
     $threadid = ($parent == 0) ? $id : $parent;
+
+    if (!$respage && defined('CHESSIB_TRUNCATE') && strlen($post['message']) > CHESSIB_TRUNCATE) {
+        $post['message'] = substr($post['message'], 0, CHESSIB_TRUNCATE)
+            . '<br><span class="truncated" style="font-style: italic; font-size: 90%;">Post truncated; open reply mode to view the full post</span>';
+    }
 
     $file_html = '';
     if ($post['file'] != '') {
@@ -491,7 +405,6 @@ function buildPost($post, $respage = false) {
             $file_path = "src/" . $post['file'];
             $thumb_path = "thumb/" . $post['thumb'];
         }
-        // Only display the image thumbnail without file information.
         $file_html = '<div class="files"><div class="file">';
         $file_html .= '<a href="' . $file_path . '" target="_blank">'
             . '<img class="post-image" src="' . $thumb_path . '" style="width:255px;height:255px" alt="" /></a>';
@@ -515,8 +428,22 @@ function buildPost($post, $respage = false) {
     return $html;
 }
 
-// buildPage() creates an index page with a posting form and a list of threads.
 function buildPage($htmlposts, $parent = 0, $pages = 0, $thispage = 0) {
+    $pagination = '';
+    if ($pages > 0) {
+        $pagination .= '<div class="pages">';
+        for ($i = 0; $i <= $pages; $i++) {
+            $link = ($i == 0) ? 'index.html' : $i . '.html';
+            $style = ' style="margin: 0 5px;"';
+            if ($i == $thispage) {
+                $pagination .= '<a class="selected"' . $style . ' href="' . $link . '">' . ($i + 1) . '</a>';
+            } else {
+                $pagination .= '<a' . $style . ' href="' . $link . '">' . ($i + 1) . '</a>';
+            }
+        }
+        $pagination .= '</div>';
+    }
+
     $post_form = <<<HTML
 <form name="post" onsubmit="return doPost(this);" enctype="multipart/form-data" action="post.php" method="post">
   <input type="hidden" name="board" value="b">
@@ -555,10 +482,9 @@ HTML;
 </form>
 HTML;
 
-    return pageHeader() . $post_form . $post_controls . pageFooter();
+    return pageHeader() . $post_form . $pagination . $post_controls . $pagination . pageFooter();
 }
 
-// buildReplyPage() creates a reply (thread) page.
 function buildReplyPage($htmlposts, $thread_id, $thread_title) {
     return <<<HTML
 <!doctype html>
@@ -668,7 +594,6 @@ function rebuildThread($id) {
     $posts = postsInThreadByID($id);
     $html = "";
     foreach ($posts as $p) {
-        // In reply mode, pass true so that buildPost() omits the [Reply] link.
         $html .= buildPost($p, true);
     }
     $html .= "<br class=\"clear\"><hr>";
@@ -678,19 +603,14 @@ function rebuildThread($id) {
     writePage("res/" . $id . ".html", $content);
 }
 
-/**
- * Modified rebuildIndexes()
- * FIX: Removed reply preview. Only the OP is shown on the main board.
- */
 function rebuildIndexes() {
     $threads = allThreads();
-    $pages = ceil(count($threads) / CHESSIB_THREADSPERPAGE) - 1;
+    $pages = max(0, ceil(count($threads) / CHESSIB_THREADSPERPAGE) - 1);
     $page = 0;
     $i = 0;
     $threadhtml = '';
 
     foreach ($threads as $th) {
-        // Only include the original post (OP) in the index.
         $threadhtml .= buildPost($th, false);
         $threadhtml .= "<br class=\"clear\"><hr>";
         $i++;
@@ -737,10 +657,11 @@ function managePage($body, $onload = '') {
     list($loggedin, $isadmin) = manageCheckLogIn();
     $adminbar = '[<a href="' . $r . '">Return</a>]';
     if ($loggedin) {
-        $adminbar = '[<a href="?manage">Status</a>] [' . ($isadmin ? '<a href="?manage&bans">Bans</a>] [' : '')
-            . '<a href="?manage&moderate">Moderate Post</a>] [<a href="?manage&rawpost">Raw Post</a>] [' .
-            ($isadmin ? '<a href="?manage&rebuildall">Rebuild All</a>] [' : '')
-            . '<a href="?manage&logout">Log Out</a>] &middot; [<a href="' . $r . '">Return</a>]';
+        $adminbar = '[<a href="?manage">Status</a>] '
+            . '[<a href="?manage&moderate">Moderate Post</a>] '
+            . '[<a href="?manage&rawpost">Raw Post</a>] '
+            . ($isadmin ? '[<a href="?manage&rebuildall">Rebuild All</a>] ' : '')
+            . '[<a href="?manage&logout">Log Out</a>] &middot; [<a href="' . $r . '">Return</a>]';
     }
     return pageHeader() . '<body' . $onload . '>
     <div style="text-align:right">' . $adminbar . '</div>
@@ -767,9 +688,7 @@ EOF;
 
 function manageStatus() {
     $threads = countThreads();
-    $bans = count(allBans());
-    $info = "$threads thread(s), $bans ban(s).";
-
+    $info = "$threads thread(s).";
     $reqmod_post_html = '';
     if (CHESSIB_REQMOD != 'disable') {
         $all = latestPosts(false);
@@ -790,12 +709,10 @@ function manageStatus() {
             }
         }
     }
-
     $reqmod_html = '';
     if ($reqmod_post_html != '') {
         $reqmod_html = '<fieldset><legend>Pending posts</legend>' . $reqmod_post_html . '</fieldset>';
     }
-
     $post_html = '';
     $latest = latestPosts(true);
     $c = 0;
@@ -809,7 +726,6 @@ function manageStatus() {
                      <input type="submit" value="Moderate"></form>';
         $c++;
     }
-
     $html = <<<EOF
 <fieldset><legend>Status</legend>
 <fieldset><legend>Info</legend>
@@ -821,46 +737,6 @@ $post_html
 </fieldset>
 </fieldset><br>
 EOF;
-    return $html;
-}
-
-function manageBanForm() {
-    $val = isset($_GET['bans']) ? $_GET['bans'] : '';
-    return <<<EOF
-<form id="tinyib" name="tinyib" method="post" action="?manage&bans">
-<fieldset>
-<legend>Ban an IP address</legend>
-<label>IP Address:</label>
-<input type="text" name="ip" value="$val"> 
-<input type="submit" value="Ban"><br>
-<label>Expire (sec):</label>
-<input type="text" name="expire" value="0">
-<small>
-<a href="#" onclick="document.tinyib.expire.value='3600';return false;">1hr</a>
-<a href="#" onclick="document.tinyib.expire.value='86400';return false;">1d</a>
-<a href="#" onclick="document.tinyib.expire.value='604800';return false;">1w</a>
-<a href="#" onclick="document.tinyib.expire.value='0';return false;">never</a>
-</small><br>
-<label>Reason:</label>
-<input type="text" name="reason">
-<small>optional</small>
-</fieldset>
-</form><br>
-EOF;
-}
-
-function manageBansTable() {
-    $bans = allBans();
-    if (count($bans) == 0) return "<p>No bans</p>";
-    $html = '<table border="1"><tr><th>IP</th><th>Set At</th><th>Expires</th><th>Reason</th><th>&nbsp;</th></tr>';
-    foreach ($bans as $b) {
-        $ex = ($b['expire'] > 0) ? date('m/d/y (D) H:i:s', $b['expire']) : 'Never';
-        $reason = $b['reason'] == '' ? '&nbsp;' : htmlentities($b['reason']);
-        $html .= '<tr><td>' . $b['ip'] . '</td><td>' . date('m/d/y (D) H:i:s', $b['timestamp'])
-            . '</td><td>' . $ex . '</td><td>' . $reason . '</td>'
-            . '<td><a href="?manage&bans&lift=' . $b['id'] . '">Lift</a></td></tr>';
-    }
-    $html .= '</table>';
     return $html;
 }
 
@@ -907,13 +783,7 @@ EOF;
 
 function manageModeratePost($post) {
     global $isadmin;
-    $ban = banByIP($post['ip']);
-    $ban_disabled = (!$ban && $isadmin) ? '' : ' disabled';
-    $ban_info = (!$ban)
-        ? ((!$isadmin) ? 'Only an admin can ban.' : 'IP: ' . $post['ip'])
-        : 'Ban already exists for ' . $post['ip'];
     $delete_info = ($post['parent'] == 0) ? 'Delete entire thread below' : 'Delete only this post';
-
     $post_html = '';
     if ($post['parent'] == 0) {
         $arr = postsInThreadByID($post['id']);
@@ -923,7 +793,6 @@ function manageModeratePost($post) {
     } else {
         $post_html .= buildPost($post, false);
     }
-
     return <<<EOF
 <fieldset>
 <legend>Moderating No.{$post['id']}</legend>
@@ -939,16 +808,6 @@ function manageModeratePost($post) {
 </td>
 <td>$delete_info</td>
 </tr>
-<tr>
-<td align="right">
-<form method="get" action="?">
-<input type="hidden" name="manage">
-<input type="hidden" name="bans" value="{$post['ip']}">
-<input type="submit" value="Ban Poster" style="width:50%;"$ban_disabled>
-</form>
-</td>
-<td>$ban_info</td>
-</tr>
 </table>
 </fieldset>
 <fieldset>
@@ -959,309 +818,277 @@ $post_html
 EOF;
 }
 
-/**
- * Main Logic
- */
-if (CHESSIB_TRIPSEED == '' || CHESSIB_ADMINPASS == '') {
-    fancyDie("CHESSIB_TRIPSEED and CHESSIB_ADMINPASS must be configured!");
+function approvePostByID($id) {
+    $db = dbConnect();
+    $stmt = $db->prepare("UPDATE " . CHESSIB_DBPOSTS . " SET moderated=1 WHERE id=:id");
+    $stmt->bindValue(':id', (int)$id, SQLITE3_INTEGER);
+    $stmt->execute();
 }
 
-$redirect = true;
-
-// 1) New Post Submission
-if (isset($_POST['body']) || isset($_FILES['file'])) {
-    list($loggedin, $isadmin) = manageCheckLogIn();
-
-    // Ban / Flood check
-    if (!$loggedin) {
-        $ban = banByIP($_SERVER['REMOTE_ADDR']);
-        if ($ban) {
-            if ($ban['expire'] == 0 || $ban['expire'] > time()) {
-                fancyDie("Your IP is banned.");
-            } else {
-                clearExpiredBans();
-            }
-        }
-        $lastpost = lastPostByIP($_SERVER['REMOTE_ADDR']);
-        if ($lastpost) {
-            $diff = time() - $lastpost['timestamp'];
-            if ($diff < CHESSIB_DELAY) {
-                fancyDie("Please wait " . (CHESSIB_DELAY - $diff) . " more second(s) before posting again.");
-            }
-        }
-    }
-
-    $rawpost = (isset($_POST['rawpost']) && $loggedin);
-
-    // Read parent from "parent" (0 = new thread, otherwise = reply)
+/**
+ * Main Logic
+ *
+ * Wrapped in a check so that if INSTALL_MODE is defined (via install.php),
+ * the main request handling is skipped.
+ */
+if (!defined('INSTALL_MODE')) {
+    $postid = null;
     $parent = 0;
-    if (isset($_POST['parent'])) {
-        $parent = (int)$_POST['parent'];
-        if ($parent != 0 && !threadExistsByID($parent)) {
-            fancyDie("Invalid parent thread ID.");
-        }
+
+    if (CHESSIB_TRIPSEED == '' || CHESSIB_ADMINPASS == '') {
+        fancyDie("CHESSIB_TRIPSEED and CHESSIB_ADMINPASS must be configured!");
     }
 
-    $post = newPost($parent);
-    $post['timestamp'] = time();
-    $post['bumped'] = time();
-    $post['ip'] = $_SERVER['REMOTE_ADDR'];
+    $redirect = true;
 
-    // Basic fields
-    $post['name'] = cleanString(substr($_POST['name'] ?? '', 0, 75));
-    $post['tripcode'] = ''; // Not fully processing tripcodes here.
-    $post['subject'] = cleanString(substr($_POST['subject'] ?? '', 0, 100));
+    if (isset($_POST['body']) || isset($_FILES['file'])) {
+        list($loggedin, $isadmin) = manageCheckLogIn();
 
-    if ($rawpost) {
-        $rawposttext = ($isadmin) ? ' <span style="color:red;">## Admin</span>' : ' <span style="color:purple;">## Mod</span>';
-        $post['message'] = $_POST['body'];
-    } else {
-        $rawposttext = '';
-        $msg = rtrim($_POST['body'] ?? '');
-        $msg = cleanString($msg);
-        $msg = str_replace("\n", "<br>", $msg);
-        $post['message'] = $msg;
-    }
-
-    $post['password'] = '';
-    $post['email'] = '';
-    $post['nameblock'] = nameBlock($post['name'], $post['tripcode'], '', $post['timestamp'], $rawposttext);
-
-    // File upload handling (optional)
-    if (isset($_FILES['file']) && $_FILES['file']['name'] != '') {
-        if ($_FILES['file']['error'] != UPLOAD_ERR_OK) {
-            fancyDie("File upload error: {$_FILES['file']['error']}");
-        }
-        if (CHESSIB_MAXKB > 0 && $_FILES['file']['size'] > (CHESSIB_MAXKB * 1024)) {
-            fancyDie("File too large. Max is " . CHESSIB_MAXKBDESC);
-        }
-        $tmp = $_FILES['file']['tmp_name'];
-        if (!is_file($tmp)) {
-            fancyDie("No uploaded file found.");
-        }
-        $post['file_original'] = substr($_FILES['file']['name'], 0, 50);
-        $post['file_hex'] = md5_file($tmp);
-        $post['file_size'] = filesize($tmp);
-        $post['file_size_formatted'] = convertBytes($post['file_size']);
-
-        // Duplicate file check
-        $db = dbConnect();
-        $st = $db->prepare("SELECT id FROM " . CHESSIB_DBPOSTS . " WHERE file_hex=:fh LIMIT 1");
-        $st->bindValue(':fh', $post['file_hex'], SQLITE3_TEXT);
-        $dupe = $st->execute()->fetchArray(SQLITE3_ASSOC);
-        if ($dupe) {
-            fancyDie("Duplicate file. Already posted <a href=\"res/" . $dupe['id'] . ".html\">here</a>.");
-        }
-
-        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
-        if ($ext == 'jpeg') $ext = 'jpg';
-        $fname = time() . substr(microtime(), 2, 3) . '.' . $ext;
-        $post['file'] = $fname;
-        $post['thumb'] = time() . substr(microtime(), 2, 3) . 's.' . $ext;
-        $dst = "src/" . $fname;
-        if (!move_uploaded_file($tmp, $dst)) {
-            fancyDie("Could not move uploaded file.");
-        }
-
-        $info = @getimagesize($dst);
-        $mime = ($info['mime'] ?? '');
-        $post['image_width'] = 0;
-        $post['image_height'] = 0;
-
-        if ($ext == 'webm') {
-            if (!CHESSIB_WEBM) {
-                fancyDie("Unsupported file type.");
-            }
-            $thb = "thumb/" . $post['thumb'];
-            copy("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFgAAABYCAYAAABX2UokAAAA0UlEQVR42u3QwQnAIBBE0c0v9ElZJL2pukl7g0Ao1/mtzD0ybA47b4cFMLDgypgWWDPBQkzJO4BAAAAAAAAAAAA7x2RJCf4rWZb04AAAAASUVORK5CYII=", $thb);
-            $post['thumb_width'] = 88;
-            $post['thumb_height'] = 88;
-        } else {
-            if (!CHESSIB_PIC) {
-                fancyDie("Unsupported file type.");
-            }
-            if ($mime != 'image/jpeg' && $mime != 'image/png' && $mime != 'image/gif') {
-                fancyDie("Unsupported image type.");
-            }
-            $post['image_width'] = $info[0];
-            $post['image_height'] = $info[1];
-
-            list($tw, $th) = array(CHESSIB_MAXWOP, CHESSIB_MAXHOP);
-            $thb = "thumb/" . $post['thumb'];
-            if (!createThumbnail($dst, $thb, $tw, $th)) {
-                fancyDie("Could not create thumbnail.");
-            }
-            $thInfo = @getimagesize($thb);
-            $post['thumb_width'] = $thInfo[0];
-            $post['thumb_height'] = $thInfo[1];
-        }
-    } else {
-        if (strip_tags(str_replace('<br>', '', $post['message'])) == '') {
-            fancyDie("Please enter a comment.");
-        }
-    }
-
-    if (!$loggedin && (($post['file'] != '' && CHESSIB_REQMOD == 'files') || CHESSIB_REQMOD == 'all')) {
-        $post['moderated'] = 0;
-        echo "Your post will be shown once approved.<br>";
-        $slow_redirect = true;
-    }
-
-    $postid = insertPost($post);
-
-    if ($post['moderated'] == 1) {
-        trimThreads();
-        if ($parent != 0) {
-            rebuildThread($parent);
-            if (strtolower($post['email']) != 'sage') {
-                if (CHESSIB_MAXREPLIES == 0 || numRepliesToThreadByID($parent) <= CHESSIB_MAXREPLIES) {
-                    bumpThreadByID($parent);
+        if (!$loggedin) {
+            $lastpost = lastPostByIP($_SERVER['REMOTE_ADDR']);
+            if ($lastpost) {
+                $diff = time() - $lastpost['timestamp'];
+                if ($diff < CHESSIB_DELAY) {
+                    fancyDie("Please wait " . (CHESSIB_DELAY - $diff) . " more second(s) before posting again.");
                 }
             }
-        } else {
-            rebuildThread($postid);
         }
-        rebuildIndexes();
-    }
 
-// 2) Delete Post from the front-end
-} elseif (isset($_GET['delete']) && !isset($_GET['manage'])) {
-    if (!isset($_POST['delete'])) {
-        fancyDie('Tick the box next to a post and click "Delete".');
-    }
-    $delid = (int)$_POST['delete'];
-    $p = postByID($delid);
-    if (!$p) fancyDie('Invalid post ID given.');
+        $rawpost = (isset($_POST['rawpost']) && $loggedin);
 
-    list($loggedin, $isadmin) = manageCheckLogIn();
-    if ($loggedin && ($_POST['password'] == '')) {
-        echo '<meta http-equiv="refresh" content="0;url=' . basename($_SERVER['PHP_SELF']) . '?manage&moderate=' . $delid . '">';
-        $redirect = false;
-    } else {
-        if ($p['password'] != '' && md5(md5($_POST['password'])) == $p['password']) {
-            $par = $p['parent'];
-            deletePostByID($delid);
-            if ($par != 0) {
-                rebuildThread($par);
+        if (isset($_POST['parent'])) {
+            $parent = (int)$_POST['parent'];
+            if ($parent != 0 && !threadExistsByID($parent)) {
+                fancyDie("Invalid parent thread ID.");
             }
-            rebuildIndexes();
-            fancyDie('Post deleted.');
-        } else {
-            fancyDie('Invalid password.');
         }
-    }
 
-// 3) Management
-} elseif (isset($_GET['manage'])) {
-    $text = '';
-    $onload = '';
-    list($loggedin, $isadmin) = manageCheckLogIn();
-    $returnlink = basename($_SERVER['PHP_SELF']);
-    $redirect = false;
+        $post = newPost($parent);
+        $post['timestamp'] = time();
+        $post['bumped'] = time();
+        $post['ip'] = $_SERVER['REMOTE_ADDR'];
 
-    if ($loggedin) {
-        if ($isadmin && isset($_GET['rebuildall'])) {
-            $all = allThreads();
-            foreach ($all as $t) {
-                rebuildThread($t['id']);
+        $post['name'] = cleanString(substr($_POST['name'] ?? '', 0, 75));
+        $post['tripcode'] = '';
+        $post['subject'] = cleanString(substr($_POST['subject'] ?? '', 0, 100));
+
+        if ($rawpost) {
+            $rawposttext = ($isadmin) ? ' <span style="color:red;">## Admin</span>' : ' <span style="color:purple;">## Mod</span>';
+            $post['message'] = $_POST['body'];
+        } else {
+            $rawposttext = '';
+            $msg = rtrim($_POST['body'] ?? '');
+            $msg = cleanString($msg);
+            $msg = str_replace("\n", "<br>", $msg);
+            $post['message'] = $msg;
+        }
+
+        $post['password'] = '';
+        $post['email'] = '';
+        $post['nameblock'] = nameBlock($post['name'], $post['tripcode'], '', $post['timestamp'], $rawposttext);
+
+        if (isset($_FILES['file']) && $_FILES['file']['name'] != '') {
+            if ($_FILES['file']['error'] != UPLOAD_ERR_OK) {
+                fancyDie("File upload error: {$_FILES['file']['error']}");
             }
-            rebuildIndexes();
-            $text .= "<div>Rebuilt board.</div>";
-        } elseif ($isadmin && isset($_GET['bans'])) {
-            clearExpiredBans();
-            if (isset($_POST['ip'])) {
-                $ip = trim($_POST['ip']);
-                if ($ip != '') {
-                    $check = banByIP($ip);
-                    if ($check) {
-                        fancyDie("Ban already exists for $ip.");
+            if (CHESSIB_MAXKB > 0 && $_FILES['file']['size'] > (CHESSIB_MAXKB * 1024)) {
+                fancyDie("File too large. Max is " . CHESSIB_MAXKBDESC);
+            }
+            $tmp = $_FILES['file']['tmp_name'];
+            if (!is_file($tmp)) {
+                fancyDie("No uploaded file found.");
+            }
+            $post['file_original'] = substr($_FILES['file']['name'], 0, 50);
+            $post['file_hex'] = md5_file($tmp);
+            $post['file_size'] = filesize($tmp);
+            $post['file_size_formatted'] = convertBytes($post['file_size']);
+
+            $db = dbConnect();
+            $st = $db->prepare("SELECT id FROM " . CHESSIB_DBPOSTS . " WHERE file_hex=:fh LIMIT 1");
+            $st->bindValue(':fh', $post['file_hex'], SQLITE3_TEXT);
+            $dupe = $st->execute()->fetchArray(SQLITE3_ASSOC);
+            if ($dupe) {
+                fancyDie("Duplicate file. Already posted <a href=\"res/" . $dupe['id'] . ".html\">here</a>.");
+            }
+
+            $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+            if ($ext == 'jpeg') $ext = 'jpg';
+            $fname = time() . substr(microtime(), 2, 3) . '.' . $ext;
+            $post['file'] = $fname;
+            $post['thumb'] = time() . substr(microtime(), 2, 3) . 's.' . $ext;
+            $dst = "src/" . $fname;
+            if (!move_uploaded_file($tmp, $dst)) {
+                fancyDie("Could not move uploaded file.");
+            }
+
+            $info = @getimagesize($dst);
+            $mime = ($info['mime'] ?? '');
+            $post['image_width'] = 0;
+            $post['image_height'] = 0;
+
+            if ($ext == 'webm') {
+                if (!CHESSIB_WEBM) {
+                    fancyDie("Unsupported file type.");
+                }
+                $thb = "thumb/" . $post['thumb'];
+                copy("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFgAAABYCAYAAABX2UokAAAA0UlEQVR42u3QwQnAIBBE0c0v9ElZJL2pukl7g0Ao1/mtzD0ybA47b4cFMLDgypgWWDPBQkzJO4BAAAAAAAAAAAA7x2RJCf4rWZb04AAAAASUVORK5CYII=", $thb);
+                $post['thumb_width'] = 88;
+                $post['thumb_height'] = 88;
+            } else {
+                if (!CHESSIB_PIC) {
+                    fancyDie("Unsupported file type.");
+                }
+                if ($mime != 'image/jpeg' && $mime != 'image/png' && $mime != 'image/gif') {
+                    fancyDie("Unsupported image type.");
+                }
+                $post['image_width'] = $info[0];
+                $post['image_height'] = $info[1];
+                list($tw, $th) = array(CHESSIB_MAXWOP, CHESSIB_MAXHOP);
+                $thb = "thumb/" . $post['thumb'];
+                if (!createThumbnail($dst, $thb, $tw, $th)) {
+                    fancyDie("Could not create thumbnail.");
+                }
+                $thInfo = @getimagesize($thb);
+                $post['thumb_width'] = $thInfo[0];
+                $post['thumb_height'] = $thInfo[1];
+            }
+        } else {
+            if (strip_tags(str_replace('<br>', '', $post['message'])) == '') {
+                fancyDie("Please enter a comment.");
+            }
+        }
+
+        if (!$loggedin && (($post['file'] != '' && CHESSIB_REQMOD == 'files') || CHESSIB_REQMOD == 'all')) {
+            $post['moderated'] = 0;
+            echo "Your post will be shown once approved.<br>";
+            $slow_redirect = true;
+        }
+
+        $postid = insertPost($post);
+
+        if ($post['moderated'] == 1) {
+            trimThreads();
+            if ($parent != 0) {
+                rebuildThread($parent);
+                if (strtolower($post['email']) != 'sage') {
+                    if (CHESSIB_MAXREPLIES == 0 || numRepliesToThreadByID($parent) <= CHESSIB_MAXREPLIES) {
+                        bumpThreadByID($parent);
                     }
-                    $ban = array('ip' => $ip, 'expire' => 0, 'reason' => '');
-                    $ban['expire'] = (int)($_POST['expire'] ?? 0);
-                    if ($ban['expire'] > 0) $ban['expire'] += time();
-                    $ban['reason'] = $_POST['reason'] ?? '';
-                    insertBan($ban);
-                    $text .= '<div>Ban record added for ' . $ip . '</div>';
                 }
-            } elseif (isset($_GET['lift'])) {
-                $lift = (int)$_GET['lift'];
-                $b = banByID($lift);
-                if ($b) {
-                    deleteBanByID($lift);
-                    $text .= '<div>Ban lifted for ' . $b['ip'] . '</div>';
-                }
-            }
-            $onload = ' onload="document.tinyib.ip.focus();"';
-            $text .= manageBanForm();
-            $text .= manageBansTable();
-        } elseif (isset($_GET['delete'])) {
-            $did = (int)$_GET['delete'];
-            $p = postByID($did);
-            if ($p) {
-                deletePostByID($did);
-                rebuildIndexes();
-                if ($p['parent'] != 0) {
-                    rebuildThread($p['parent']);
-                }
-                $text .= '<div>Post ' . $did . ' deleted.</div>';
             } else {
-                fancyDie("No post with that ID");
+                rebuildThread($postid);
             }
-        } elseif (isset($_GET['approve'])) {
-            $aid = (int)$_GET['approve'];
-            $p = postByID($aid);
-            if ($p) {
-                approvePostByID($aid);
-                $tid = ($p['parent'] == 0) ? $p['id'] : $p['parent'];
-                if (strtolower($p['email']) != 'sage'
-                    && (CHESSIB_MAXREPLIES == 0 || numRepliesToThreadByID($tid) <= CHESSIB_MAXREPLIES)) {
-                    bumpThreadByID($tid);
+            rebuildIndexes();
+        }
+    } elseif (isset($_GET['delete']) && !isset($_GET['manage'])) {
+        if (!isset($_POST['delete'])) {
+            fancyDie('Tick the box next to a post and click "Delete".');
+        }
+        $delid = (int)$_POST['delete'];
+        $p = postByID($delid);
+        if (!$p) fancyDie('Invalid post ID given.');
+
+        list($loggedin, $isadmin) = manageCheckLogIn();
+        if ($loggedin && ($_POST['password'] == '')) {
+            echo '<meta http-equiv="refresh" content="0;url=' . basename($_SERVER['PHP_SELF']) . '?manage&moderate=' . $delid . '">';
+            $redirect = false;
+        } else {
+            if ($p['password'] != '' && md5(md5($_POST['password'])) == $p['password']) {
+                $par = $p['parent'];
+                deletePostByID($delid);
+                if ($par != 0) {
+                    rebuildThread($par);
                 }
-                rebuildThread($tid);
                 rebuildIndexes();
-                $text .= '<div>Post ' . $aid . ' approved.</div>';
+                fancyDie('Post deleted.');
             } else {
-                fancyDie("No post with that ID");
+                fancyDie('Invalid password.');
             }
-        } elseif (isset($_GET['moderate'])) {
-            $mid = (int)$_GET['moderate'];
-            if ($mid > 0) {
-                $p = postByID($mid);
+        }
+    } elseif (isset($_GET['manage'])) {
+        $text = '';
+        $onload = '';
+        list($loggedin, $isadmin) = manageCheckLogIn();
+        $returnlink = basename($_SERVER['PHP_SELF']);
+        $redirect = false;
+
+        if ($loggedin) {
+            if ($isadmin && isset($_GET['rebuildall'])) {
+                $all = allThreads();
+                foreach ($all as $t) {
+                    rebuildThread($t['id']);
+                }
+                rebuildIndexes();
+                $text .= "<div>Rebuilt board.</div>";
+            } elseif (isset($_GET['delete'])) {
+                $did = (int)$_GET['delete'];
+                $p = postByID($did);
                 if ($p) {
-                    $text .= manageModeratePost($p);
+                    deletePostByID($did);
+                    rebuildIndexes();
+                    if ($p['parent'] != 0) {
+                        rebuildThread($p['parent']);
+                    }
+                    $text .= '<div>Post ' . $did . ' deleted.</div>';
                 } else {
                     fancyDie("No post with that ID");
                 }
-            } else {
-                $onload = ' onload="document.tinyib.moderate.focus();"';
-                $text .= manageModeratePostForm();
+            } elseif (isset($_GET['approve'])) {
+                $aid = (int)$_GET['approve'];
+                $p = postByID($aid);
+                if ($p) {
+                    approvePostByID($aid);
+                    $tid = ($p['parent'] == 0) ? $p['id'] : $p['parent'];
+                    if (strtolower($p['email']) != 'sage'
+                        && (CHESSIB_MAXREPLIES == 0 || numRepliesToThreadByID($tid) <= CHESSIB_MAXREPLIES)) {
+                        bumpThreadByID($tid);
+                    }
+                    rebuildThread($tid);
+                    rebuildIndexes();
+                    $text .= '<div>Post ' . $aid . ' approved.</div>';
+                } else {
+                    fancyDie("No post with that ID");
+                }
+            } elseif (isset($_GET['moderate'])) {
+                $mid = (int)$_GET['moderate'];
+                if ($mid > 0) {
+                    $p = postByID($mid);
+                    if ($p) {
+                        $text .= manageModeratePost($p);
+                    } else {
+                        fancyDie("No post with that ID");
+                    }
+                } else {
+                    $onload = ' onload="document.tinyib.moderate.focus();"';
+                    $text .= manageModeratePostForm();
+                }
+            } elseif (isset($_GET['rawpost'])) {
+                $onload = ' onload="document.tinyib.message.focus();"';
+                $text .= manageRawPostForm();
+            } elseif (isset($_GET['logout'])) {
+                $_SESSION['tinyib'] = '';
+                session_destroy();
+                echo '<meta http-equiv="refresh" content="0;url=' . $returnlink . '?manage">';
+                exit;
             }
-        } elseif (isset($_GET['rawpost'])) {
-            $onload = ' onload="document.tinyib.message.focus();"';
-            $text .= manageRawPostForm();
-        } elseif (isset($_GET['logout'])) {
-            $_SESSION['tinyib'] = '';
-            session_destroy();
-            echo '<meta http-equiv="refresh" content="0;url=' . $returnlink . '?manage">';
-            exit;
+            if ($text == '') {
+                $text .= manageStatus();
+            }
+        } else {
+            $onload = ' onload="document.tinyib.password.focus();"';
+            $text .= manageLogInForm();
         }
-        if ($text == '') {
-            $text .= manageStatus();
-        }
+        echo managePage($text, $onload);
     } else {
-        $onload = ' onload="document.tinyib.password.focus();"';
-        $text .= manageLogInForm();
+        if (!file_exists('index.html') || countThreads() == 0) {
+            rebuildIndexes();
+        }
     }
-    echo managePage($text, $onload);
-} else {
-    if (!file_exists('index.html') || countThreads() == 0) {
-        rebuildIndexes();
-    }
-}
 
-if ($redirect) {
-    $redirect_url = ($parent != 0) ? "res/" . $parent . ".html?" . time() . "#{$postid}" : "index.html?" . time();
-    echo '<meta http-equiv="refresh" content="' . (isset($slow_redirect) ? 3 : 0) . ';url=' . $redirect_url . '">';
+    if ($redirect && $postid !== null) {
+        $redirect_url = ($parent != 0) ? "res/" . $parent . ".html?" . time() . "#{$postid}" : "index.html?" . time();
+        echo '<meta http-equiv="refresh" content="' . (isset($slow_redirect) ? 3 : 0) . ';url=' . $redirect_url . '">';
+    }
 }
 
 /**
@@ -1329,14 +1156,5 @@ function latestPosts($onlyApproved = false, $limit = 100) {
     }
     return $posts;
 }
-
-/**
- * Approve a post (set moderated=1) by its ID.
- */
-function approvePostByID($id) {
-    $db = dbConnect();
-    $stmt = $db->prepare("UPDATE " . CHESSIB_DBPOSTS . " SET moderated=1 WHERE id=:id");
-    $stmt->bindValue(':id', (int)$id, SQLITE3_INTEGER);
-    $stmt->execute();
-}
 ?>
+
