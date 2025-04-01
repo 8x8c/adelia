@@ -2,7 +2,7 @@
 # Adelia -  elite simple imageboard
 
 
-Based on Claire, tinyib, and vichan 
+Based on Claire, tinyib, and vichan and coding from Ai 
 
 There are lots of imageboard scripts on github, most of them are horrible! Adelia is a no-nonsense modular solution. 
 
